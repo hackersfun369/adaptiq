@@ -72,11 +72,26 @@ const generator = {
     const list = TASKS[subskill] ?? []
     const task = list[Math.floor(Math.random() * list.length)]
 
+    // build gap context — tell the model what it's been missing
+    const node = skillGraph.getAll().find(
+      n => n.domain === domain && n.subskill === subskill
+    )
+    const topFailures = node
+      ? Object.entries(node.failureBreakdown)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 2)
+          .map(([k]) => k)
+      : []
+
+    const gapHint = topFailures.length > 0
+      ? `\n\nNote: previous attempts at this skill failed on: ${topFailures.join(', ')}. Pay special attention to these.`
+      : ''
+
     return {
       id: crypto.randomUUID(),
       domain,
       difficulty,
-      prompt: task.prompt,
+      prompt: task.prompt + gapHint,
       verifiable: true,
       verifierType: 'code' as const,
       metadata: { subskill, mustContain: task.mustContain }
@@ -122,21 +137,22 @@ const loop = new InnerLoop({
   targetDifficulty: 0.5,
   maxRuns: 12,
   onEvent: (e) => {
-    const subskill = e.task.metadata?.subskill as string ?? 'general'
+  const subskill = e.task.metadata?.subskill as string ?? 'general'
 
-    skillGraph.update({
-      nodeId: `typescript::${subskill}`,
-      domain: 'typescript',
-      subskill,
-      passed: e.evaluation.passed,
-      score: e.evaluation.score,
-      failureCategory: e.evaluation.failureCategory
-    })
+  skillGraph.update({
+    nodeId: `typescript::${subskill}`,
+    domain: 'typescript',
+    subskill,
+    passed: e.evaluation.passed,
+    score: e.evaluation.score,
+    failureCategory: e.evaluation.failureCategory
+  })
 
-    if (!e.evaluation.passed) {
-      console.log(`  ↳ ${e.evaluation.explanation}`)
-    }
+  if (!e.evaluation.passed) {
+    console.log(`  ↳ ${e.evaluation.explanation}`)
+    console.log(`  ↳ confidence=${e.attempt.confidence.toFixed(2)} vs score=${e.evaluation.score.toFixed(2)} — calibration gap detected`)
   }
+}
 })
 
 await loop.run()

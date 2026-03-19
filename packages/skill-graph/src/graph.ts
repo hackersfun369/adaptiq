@@ -3,6 +3,8 @@ import type { SkillNode, SkillEdge, SkillUpdate } from './types.js'
 const DECAY = 0.1    // how much confidence drops on failure
 const GAIN  = 0.05   // how much confidence rises on pass
 
+
+
 export class SkillGraphStore {
   private nodes = new Map<string, SkillNode>()
   private edges: SkillEdge[] = []
@@ -62,6 +64,10 @@ export class SkillGraphStore {
     )
     return candidates.sort((a, b) => a.confidence - b.confidence)[0]
   }
+
+  getBySubskill(domain: string, subskill: string): SkillNode | undefined {
+  return this.nodes.get(this.nodeId(domain, subskill))
+}
 
   // Returns skills below a confidence threshold
   gaps(threshold = 0.6, domain?: string): SkillNode[] {
