@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "savedAt": "2026-03-19T14:47:31.585Z",
+  "nodes": [
+    [
+      "typescript::string-manipulation",
+      {
+        "id": "typescript::string-manipulation",
+        "domain": "typescript",
+        "subskill": "string-manipulation",
+        "confidence": 0.6,
+        "attempts": 53,
+        "passes": 12,
+        "failures": 41,
+        "lastAttempted": "2026-03-19T14:47:31.050Z",
+        "failureBreakdown": {
+          "execution": 40
+        }
+      }
+    ],
+    [
+      "typescript::array-methods",
+      {
+        "id": "typescript::array-methods",
+        "domain": "typescript",
+        "subskill": "array-methods",
+        "confidence": 0.6000000000000001,
+        "attempts": 5,
+        "passes": 4,
+        "failures": 1,
+        "lastAttempted": "2026-03-19T14:47:31.241Z",
+        "failureBreakdown": {}
+      }
+    ],
+    [
+      "typescript::algorithms",
+      {
+        "id": "typescript::algorithms",
+        "domain": "typescript",
+        "subskill": "algorithms",
+        "confidence": 0.6000000000000001,
+        "attempts": 5,
+        "passes": 4,
+        "failures": 1,
+        "lastAttempted": "2026-03-19T14:47:31.584Z",
+        "failureBreakdown": {}
+      }
+    ]
+  ],
+  "edges": []
+}

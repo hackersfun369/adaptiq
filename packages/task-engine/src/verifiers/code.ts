@@ -53,45 +53,31 @@ export function verifyCode(
     }
   }
 
-  // resolve function from multiple possible export styles
-  function resolveFunction(sandbox: any, name: string): Function | undefined {
-    // CommonJS exports
-    if (typeof sandbox.module?.exports?.[name] === 'function')
-      return sandbox.module.exports[name]
-    if (typeof sandbox.exports?.[name] === 'function')
-      return sandbox.exports[name]
-    // default export
-    if (typeof sandbox.module?.exports?.default === 'function')
-      return sandbox.module.exports.default
-    // direct variable on sandbox (plain function declarations)
-    if (typeof sandbox[name] === 'function')
-      return sandbox[name]
-    // first function value on sandbox
-    const direct = Object.values(sandbox).find(
-      v => typeof v === 'function'
-    ) as Function | undefined
-    if (direct) return direct
-    return undefined
-  }
+  // append explicit export so we can always find the function
+  const wrapped = `
+${transpiled}
+if (typeof ${functionName} !== 'undefined') {
+  module.exports['${functionName}'] = ${functionName};
+}
+`
 
   const results: CodeVerifierResult['results'] = []
 
   for (const tc of testCases) {
     try {
-      const sandbox = {
+      // give the sandbox full access to the global context
+      // so Array.from, String.prototype etc all work
+      const sandbox = vm.createContext({
+        ...globalThis,
         module: { exports: {} as any },
         exports: {} as any,
-        console,
-        Math,
-        Array,
-        Object,
-        JSON,
-        Set,
-        Map
-      }
+      })
 
-      vm.runInNewContext(transpiled, sandbox)
-      const fn = resolveFunction(sandbox, functionName)
+      vm.runInContext(wrapped, sandbox)
+
+      const fn =
+        sandbox.module?.exports?.[functionName] ??
+        sandbox[functionName]
 
       if (typeof fn !== 'function') {
         results.push({
@@ -99,7 +85,7 @@ export function verifyCode(
           expected: tc.expected,
           actual: undefined,
           passed: false,
-          error: `Function "${functionName}" not found — make sure it is declared at the top level`
+          error: `Function "${functionName}" not found`
         })
         continue
       }
@@ -107,6 +93,7 @@ export function verifyCode(
       const actual = fn(...(tc.args as any[]))
       const passed = JSON.stringify(actual) === JSON.stringify(tc.expected)
       results.push({ args: tc.args, expected: tc.expected, actual, passed })
+
     } catch (e: any) {
       results.push({
         args: tc.args,

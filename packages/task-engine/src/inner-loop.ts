@@ -68,10 +68,12 @@ export class InnerLoop {
   private async attempt(task: Task): Promise<Attempt> {
   const start = Date.now()
 
-  // TOON format — everything on one line, minimal tokens
-  const prompt = `T:${task.prompt} R:? A:? C:?`
+  const prompt =
+    `Function to implement: ${task.prompt}\n` +
+    `Reply with JSON: {"r":"<one line reason>","a":"<code only>","c":<0.0-1.0>}`
 
   const result = await this.opts.adapter.complete(prompt)
+  // console.log(`  🔍 raw output: ${result.content.slice(0, 200)}`)
   const parsed = this.parseOutput(result.content)
 
   return {
@@ -86,13 +88,16 @@ export class InnerLoop {
 }
 
 private parseOutput(raw: string) {
-  const r = raw.match(/R:(.*?)(?=A:|$)/s)?.[1]?.trim() ?? ''
-  const a = raw.match(/A:(.*?)(?=C:|$)/s)?.[1]?.trim() ?? raw.trim()
-  const c = parseFloat(raw.match(/C:([0-9.]+)/)?.[1] ?? '0.5')
-  return {
-    reasoning: r,
-    answer: a,
-    confidence: Math.min(1, Math.max(0, c))
+  try {
+    const obj = JSON.parse(raw)
+    return {
+      reasoning: String(obj.r ?? ''),
+      answer: String(obj.a ?? raw),
+      confidence: Math.min(1, Math.max(0, Number(obj.c ?? 0.5)))
+    }
+  } catch {
+    return { reasoning: '', answer: raw.trim(), confidence: 0.5 }
   }
 }
+  
 }

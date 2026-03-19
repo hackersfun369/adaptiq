@@ -3,8 +3,12 @@ import { InnerLoop, GroqAdapter } from '../packages/task-engine/src/index.js'
 import { SkillGraphStore } from '../packages/skill-graph/src/index.js'
 import { verifyCode } from '../packages/task-engine/src/verifiers/code.js'
 
+const GRAPH_PATH = '.skill-graph.json'
+
 const adapter = new GroqAdapter()
 const skillGraph = new SkillGraphStore()
+
+skillGraph.load(GRAPH_PATH)
 
 interface TaskDef {
   prompt: string
@@ -12,26 +16,10 @@ interface TaskDef {
   testCases: Array<{ args: unknown[]; expected: unknown }>
 }
 
-const EXAMPLE = `
-Example of correct output format:
-const add = (a: number, b: number): number => {
-  return a + b
-}
-`
-
-const RULES = [
-  `Rules:`,
-  `- Write ONLY the function body, nothing else`,
-  `- No export keyword`,
-  `- No import statements`,
-  `- No markdown, no explanation`,
-  `- The function must return a single value, not an array`
-].join('\n')
-
 const TASKS: Record<string, TaskDef[]> = {
   'string-manipulation': [
     {
-      prompt: 'Write a TypeScript function called `reverseString` that reverses a string. reverseString("hello") returns "olleh".',
+      prompt: 'const reverseString=(s:string)=>... // "hello"->"olleh"',
       functionName: 'reverseString',
       testCases: [
         { args: ['hello'], expected: 'olleh' },
@@ -40,16 +28,16 @@ const TASKS: Record<string, TaskDef[]> = {
       ]
     },
     {
-      prompt: 'Write a TypeScript function called `isPalindrome` that returns true if a string is a palindrome, false otherwise. Ignore spaces and casing. isPalindrome("racecar") returns true. isPalindrome("hello") returns false.',
+      prompt: 'const isPalindrome=(s:string)=>... // "racecar"->true "hello"->false',
       functionName: 'isPalindrome',
       testCases: [
         { args: ['racecar'], expected: true },
         { args: ['hello'], expected: false },
-        { args: ['AmanaplanacanalpanaMa'.toLowerCase()], expected: true }
+        { args: ['amanaplanacanalpanama'], expected: true }
       ]
     },
     {
-      prompt: 'Write a TypeScript function called `countVowels` that counts the number of vowels (a,e,i,o,u) in a string. countVowels("hello") returns 2. countVowels("xyz") returns 0.',
+      prompt: 'const countVowels=(s:string)=>... // "hello"->2 "xyz"->0',
       functionName: 'countVowels',
       testCases: [
         { args: ['hello'], expected: 2 },
@@ -60,7 +48,7 @@ const TASKS: Record<string, TaskDef[]> = {
   ],
   'array-methods': [
     {
-      prompt: 'Write a TypeScript function called `removeDuplicates` that removes duplicates from a number array and returns the unique values. removeDuplicates([1,2,2,3]) returns [1,2,3].',
+      prompt: 'const removeDuplicates=(a:number[])=>... // [1,2,2,3]->[1,2,3]',
       functionName: 'removeDuplicates',
       testCases: [
         { args: [[1, 2, 2, 3]], expected: [1, 2, 3] },
@@ -69,7 +57,7 @@ const TASKS: Record<string, TaskDef[]> = {
       ]
     },
     {
-      prompt: 'Write a TypeScript function called `arrayIntersection` that returns a new array of items present in both input arrays. arrayIntersection([1,2,3],[2,3,4]) returns [2,3].',
+      prompt: 'const arrayIntersection=(a:number[],b:number[])=>... // [1,2,3],[2,3,4]->[2,3]',
       functionName: 'arrayIntersection',
       testCases: [
         { args: [[1, 2, 3], [2, 3, 4]], expected: [2, 3] },
@@ -78,7 +66,7 @@ const TASKS: Record<string, TaskDef[]> = {
       ]
     },
     {
-      prompt: 'Write a TypeScript function called `flattenOnce` that flattens a nested array exactly one level deep. flattenOnce([[1,2],[3,4]]) returns [1,2,3,4].',
+      prompt: 'const flattenOnce=(a:any[][])=>... // [[1,2],[3,4]]->[1,2,3,4]',
       functionName: 'flattenOnce',
       testCases: [
         { args: [[[1, 2], [3, 4]]], expected: [1, 2, 3, 4] },
@@ -89,7 +77,7 @@ const TASKS: Record<string, TaskDef[]> = {
   ],
   'algorithms': [
     {
-      prompt: 'Write a TypeScript function called `isPrime` that returns true if a number is prime, false otherwise. isPrime(2) returns true. isPrime(9) returns false. isPrime(1) returns false. isPrime(17) returns true.',
+      prompt: 'const isPrime=(n:number)=>... // 2->true 9->false 1->false',
       functionName: 'isPrime',
       testCases: [
         { args: [2], expected: true },
@@ -99,7 +87,7 @@ const TASKS: Record<string, TaskDef[]> = {
       ]
     },
     {
-      prompt: 'Write a TypeScript function called `fibonacci` that returns the nth Fibonacci number as a single integer. fibonacci(0) returns 0. fibonacci(1) returns 1. fibonacci(10) returns 55. Use memoization for efficiency.',
+      prompt: 'const fibonacci=(n:number)=>... // 0->0 1->1 10->55 memoized',
       functionName: 'fibonacci',
       testCases: [
         { args: [0], expected: 0 },
@@ -108,7 +96,7 @@ const TASKS: Record<string, TaskDef[]> = {
       ]
     },
     {
-      prompt: 'Write a TypeScript function called `binarySearch` that returns the index of target in a sorted number array, or -1 if not found. binarySearch([1,3,5,7,9], 5) returns 2. binarySearch([1,3,5,7,9], 6) returns -1.',
+      prompt: 'const binarySearch=(a:number[],t:number)=>... // [1,3,5,7,9],5->2 miss->-1',
       functionName: 'binarySearch',
       testCases: [
         { args: [[1, 3, 5, 7, 9], 5], expected: 2 },
@@ -121,46 +109,33 @@ const TASKS: Record<string, TaskDef[]> = {
 
 const subskills = Object.keys(TASKS)
 
-// seed all subskills at low confidence so gaps exist from the start
+// seed subskills that don't exist yet in the loaded graph
 for (const subskill of subskills) {
-  skillGraph.update({
-    nodeId: `typescript::${subskill}`,
-    domain: 'typescript',
-    subskill,
-    passed: false,
-    score: 0,
-    failureCategory: undefined
-  })
+  const existing = skillGraph.getBySubskill('typescript', subskill)
+  if (!existing) {
+    skillGraph.update({
+      nodeId: `typescript::${subskill}`,
+      domain: 'typescript',
+      subskill,
+      passed: false,
+      score: 0,
+      failureCategory: undefined
+    })
+  }
 }
 
 const generator = {
   async generate(domain: string, difficulty: number) {
-    // always target the weakest subskill
     const weak = skillGraph.weakest(domain)
     const subskill = weak?.subskill ?? subskills[0]
     const list = TASKS[subskill] ?? []
     const task = list[Math.floor(Math.random() * list.length)]
 
-    // build gap hint from failure history
-    const node = skillGraph.getAll().find(
-      n => n.domain === domain && n.subskill === subskill
-    )
-    const topFailures = node
-      ? Object.entries(node.failureBreakdown)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 2)
-          .map(([k]) => k)
-      : []
-
-    const gapHint = topFailures.length > 0
-      ? `\nPrevious attempts at this skill failed on: ${topFailures.join(', ')}. Fix these specifically.`
-      : ''
-
     return {
       id: crypto.randomUUID(),
       domain,
       difficulty,
-      prompt: [task.prompt, gapHint, EXAMPLE, RULES].join('\n'),
+      prompt: task.prompt,
       verifiable: true,
       verifierType: 'code' as const,
       metadata: {
@@ -176,7 +151,6 @@ const evaluator = {
   async evaluate(task: any, attempt: any) {
     const { functionName, testCases } = task.metadata
     const result = verifyCode(attempt.output, functionName, testCases)
-
     return {
       passed: result.passed,
       score: result.score,
@@ -187,7 +161,7 @@ const evaluator = {
   }
 }
 
-console.log('Starting adaptiq — real code execution verifier\n')
+console.log('\nStarting adaptiq — persistent skill graph\n')
 
 const loop = new InnerLoop({
   adapter,
@@ -223,4 +197,6 @@ const loop = new InnerLoop({
 })
 
 await loop.run()
+
 skillGraph.summary()
+skillGraph.save(GRAPH_PATH)

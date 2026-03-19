@@ -29,7 +29,7 @@ export class GroqAdapter implements LLMAdapter {
 
   async complete(
   prompt: string,
-  systemPrompt = 'Reply in TOON format. Input: T:<task> R:? A:? C:? Output: R:<one line> A:<code> C:<0-1>. Code only in A. No prose.'
+  systemPrompt = 'You are a TypeScript code assistant. Always reply with valid JSON only. No markdown. No prose.'
 ) {
     const maxRetries = 4
     let attempt = 0
@@ -44,14 +44,15 @@ export class GroqAdapter implements LLMAdapter {
             Authorization: `Bearer ${this.apiKey}`
           },
           body: JSON.stringify({
-            model: this.model,
-            max_tokens: 512,
-            temperature: 0.3,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: prompt }
-            ]
-          })
+  model: this.model,
+  max_tokens: 200,
+  temperature: 0.3,
+  response_format: { type: 'json_object' },
+  messages: [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: prompt }
+  ]
+})
         }
       )
 
