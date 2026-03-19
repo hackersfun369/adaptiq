@@ -13,6 +13,8 @@ interface GroqResponse {
   }
 }
 
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
 export class GroqAdapter implements LLMAdapter {
   private apiKey: string
   private model: string
@@ -26,42 +28,61 @@ export class GroqAdapter implements LLMAdapter {
   }
 
   async complete(
-    prompt: string,
-    systemPrompt = 'You are a precise reasoning engine.'
-  ) {
-    const res = await fetch(
-      'https://api.groq.com/openai/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify({
-          model: this.model,
-          max_tokens: 1024,
-          temperature: 0.7,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt }
-          ]
-        })
+  prompt: string,
+  systemPrompt = 'Reply in TOON format. Input: T:<task> R:? A:? C:? Output: R:<one line> A:<code> C:<0-1>. Code only in A. No prose.'
+) {
+    const maxRetries = 4
+    let attempt = 0
+
+    while (attempt < maxRetries) {
+      const res = await fetch(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`
+          },
+          body: JSON.stringify({
+            model: this.model,
+            max_tokens: 512,
+            temperature: 0.3,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: prompt }
+            ]
+          })
+        }
+      )
+
+      // rate limited — wait and retry
+      if (res.status === 429) {
+        const retryAfter = res.headers.get('retry-after')
+        const waitMs = retryAfter
+          ? parseFloat(retryAfter) * 1000
+          : 2000 * (attempt + 1)
+        console.log(`  ⏳ rate limit — waiting ${(waitMs / 1000).toFixed(1)}s...`)
+        await sleep(waitMs)
+        attempt++
+        continue
       }
-    )
 
-    if (!res.ok) {
-      const err = await res.text()
-      throw new Error(`Groq API error ${res.status}: ${err}`)
+      if (!res.ok) {
+        const err = await res.text()
+        throw new Error(`Groq API error ${res.status}: ${err}`)
+      }
+
+      const data = (await res.json()) as GroqResponse
+
+      return {
+        content: data.choices[0]?.message?.content ?? '',
+        model: data.model,
+        tokensUsed:
+          (data.usage?.prompt_tokens ?? 0) +
+          (data.usage?.completion_tokens ?? 0)
+      }
     }
 
-    const data = (await res.json()) as GroqResponse
-
-    return {
-      content: data.choices[0]?.message?.content ?? '',
-      model: data.model,
-      tokensUsed:
-        (data.usage?.prompt_tokens ?? 0) +
-        (data.usage?.completion_tokens ?? 0)
-    }
+    throw new Error(`Groq rate limit exceeded after ${maxRetries} retries`)
   }
 }

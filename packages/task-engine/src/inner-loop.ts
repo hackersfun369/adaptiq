@@ -66,41 +66,33 @@ export class InnerLoop {
   }
 
   private async attempt(task: Task): Promise<Attempt> {
-    const start = Date.now()
+  const start = Date.now()
 
-    const prompt = [
-      `Task: ${task.prompt}`,
-      ``,
-      `Think step by step. Then respond in exactly this format:`,
-      ``,
-      `REASONING: <your chain of thought>`,
-      `ANSWER: <your final answer>`,
-      `CONFIDENCE: <a number from 0.0 to 1.0>`
-    ].join('\n')
+  // TOON format — everything on one line, minimal tokens
+  const prompt = `T:${task.prompt} R:? A:? C:?`
 
-    const result = await this.opts.adapter.complete(prompt)
-    const parsed = this.parseOutput(result.content)
+  const result = await this.opts.adapter.complete(prompt)
+  const parsed = this.parseOutput(result.content)
 
-    return {
-      taskId: task.id,
-      output: parsed.answer,
-      confidence: parsed.confidence,
-      reasoning: parsed.reasoning,
-      durationMs: Date.now() - start,
-      timestamp: new Date(),
-      model: result.model
-    }
+  return {
+    taskId: task.id,
+    output: parsed.answer,
+    confidence: parsed.confidence,
+    reasoning: parsed.reasoning,
+    durationMs: Date.now() - start,
+    timestamp: new Date(),
+    model: result.model
   }
+}
 
-  private parseOutput(raw: string) {
-    const reasoning =
-      raw.match(/REASONING:\s*([\s\S]*?)(?=ANSWER:)/i)?.[1]?.trim() ?? ''
-    const answer =
-      raw.match(/ANSWER:\s*([\s\S]*?)(?=CONFIDENCE:)/i)?.[1]?.trim() ?? raw
-    const confidenceRaw =
-      raw.match(/CONFIDENCE:\s*([0-9.]+)/i)?.[1] ?? '0.5'
-    const confidence = Math.min(1, Math.max(0, parseFloat(confidenceRaw)))
-
-    return { reasoning, answer, confidence }
+private parseOutput(raw: string) {
+  const r = raw.match(/R:(.*?)(?=A:|$)/s)?.[1]?.trim() ?? ''
+  const a = raw.match(/A:(.*?)(?=C:|$)/s)?.[1]?.trim() ?? raw.trim()
+  const c = parseFloat(raw.match(/C:([0-9.]+)/)?.[1] ?? '0.5')
+  return {
+    reasoning: r,
+    answer: a,
+    confidence: Math.min(1, Math.max(0, c))
   }
+}
 }
