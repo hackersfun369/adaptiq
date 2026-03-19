@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "savedAt": "2026-03-19T14:47:31.585Z",
+  "savedAt": "2026-03-19T14:51:33.956Z",
   "nodes": [
     [
       "typescript::string-manipulation",
@@ -8,11 +8,11 @@
         "id": "typescript::string-manipulation",
         "domain": "typescript",
         "subskill": "string-manipulation",
-        "confidence": 0.6,
-        "attempts": 53,
-        "passes": 12,
+        "confidence": 1,
+        "attempts": 77,
+        "passes": 36,
         "failures": 41,
-        "lastAttempted": "2026-03-19T14:47:31.050Z",
+        "lastAttempted": "2026-03-19T14:51:33.956Z",
         "failureBreakdown": {
           "execution": 40
         }
@@ -24,11 +24,11 @@
         "id": "typescript::array-methods",
         "domain": "typescript",
         "subskill": "array-methods",
-        "confidence": 0.6000000000000001,
-        "attempts": 5,
-        "passes": 4,
+        "confidence": 1,
+        "attempts": 13,
+        "passes": 12,
         "failures": 1,
-        "lastAttempted": "2026-03-19T14:47:31.241Z",
+        "lastAttempted": "2026-03-19T14:51:29.865Z",
         "failureBreakdown": {}
       }
     ],
@@ -38,11 +38,11 @@
         "id": "typescript::algorithms",
         "domain": "typescript",
         "subskill": "algorithms",
-        "confidence": 0.6000000000000001,
-        "attempts": 5,
-        "passes": 4,
+        "confidence": 1,
+        "attempts": 13,
+        "passes": 12,
         "failures": 1,
-        "lastAttempted": "2026-03-19T14:47:31.584Z",
+        "lastAttempted": "2026-03-19T14:51:30.273Z",
         "failureBreakdown": {}
       }
     ]
