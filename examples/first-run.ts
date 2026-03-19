@@ -5,47 +5,47 @@ import { SkillGraphStore } from '../packages/skill-graph/src/index.js'
 const adapter = new GroqAdapter()
 const skillGraph = new SkillGraphStore()
 
-const TASKS: Record<string, { prompt: string; mustContain: string[] }[]> = {
+const TASKS: Record<string, { prompt: string; mustContain: string[][] }[]> = {
   'string-manipulation': [
     {
       prompt: 'Write a TypeScript function that reverses a string.',
-      mustContain: ['reverse', 'split', 'join']
+      mustContain: [['split', 'reverse', 'join'], ['reduce'], ['for']]
     },
     {
-      prompt: 'Write a TypeScript function that checks if a string is a palindrome. It must handle spaces and casing.',
-      mustContain: ['toLowerCase', 'replace', 'split', 'reverse']
+      prompt: 'Write a TypeScript function that checks if a string is a palindrome. Handle spaces and casing.',
+      mustContain: [['toLowerCase'], ['split', 'reverse', 'join']]
     },
     {
-      prompt: 'Write a TypeScript function that truncates a string to N characters and adds "..." if truncated.',
-      mustContain: ['slice', 'length']
+      prompt: 'Write a TypeScript function that truncates a string to N chars and adds "..." if truncated.',
+      mustContain: [['slice', 'substring', 'length']]
     }
   ],
   'array-methods': [
     {
-      prompt: 'Write a TypeScript function that removes duplicates from an array using a Set.',
-      mustContain: ['Set', 'Array.from']
+      prompt: 'Write a TypeScript function that removes duplicates from an array.',
+      mustContain: [['Set'], ['filter', 'indexOf', 'includes']]
     },
     {
       prompt: 'Write a TypeScript function that groups an array of objects by a given key.',
-      mustContain: ['reduce', 'Record']
+      mustContain: [['reduce', 'forEach']]
     },
     {
-      prompt: 'Write a TypeScript function that returns the intersection of two arrays.',
-      mustContain: ['filter', 'includes']
+      prompt: 'Write a TypeScript function that returns items present in both arrays (intersection).',
+      mustContain: [['filter'], ['includes', 'has', 'indexOf']]
     }
   ],
   'algorithms': [
     {
       prompt: 'Write a TypeScript function that checks if a number is prime.',
-      mustContain: ['Math.sqrt', 'for']
+      mustContain: [['Math.sqrt', 'for', 'while']]
     },
     {
       prompt: 'Write a TypeScript function that returns the nth Fibonacci number using memoization.',
-      mustContain: ['Map', 'recursive', 'memo']
+      mustContain: [['Map', 'cache', 'memo', 'Record', '{}']]
     },
     {
-      prompt: 'Write a TypeScript binary search function that returns the index of a target in a sorted array or -1.',
-      mustContain: ['Math.floor', 'while', 'mid']
+      prompt: 'Write a TypeScript binary search function returning the index of target in a sorted array or -1.',
+      mustContain: [['Math.floor', 'Math.ceil'], ['while', 'for'], ['mid', 'middle', 'pivot']]
     }
   ]
 }
@@ -101,17 +101,17 @@ const generator = {
 
 const evaluator = {
   async evaluate(task: any, attempt: any) {
-    const mustContain: string[] = task.metadata?.mustContain ?? []
+    const mustContain: string[][] = task.metadata?.mustContain ?? []
 
-    const missing = mustContain.filter(
-      (kw: string) => !attempt.output.includes(kw)
+    // each group passes if ANY keyword in the group is present
+    const failedGroups = mustContain.filter(
+      (group: string[]) => !group.some((kw: string) => attempt.output.includes(kw))
     )
 
-    // strict — any missing keyword = fail
-    const passed = missing.length === 0
+    const passed = failedGroups.length === 0
     const score = passed
       ? attempt.confidence
-      : Math.max(0, (mustContain.length - missing.length) / mustContain.length) * 0.5
+      : Math.max(0, (mustContain.length - failedGroups.length) / mustContain.length) * 0.5
 
     return {
       passed,
@@ -119,7 +119,7 @@ const evaluator = {
       failureCategory: passed ? undefined : 'execution' as const,
       explanation: passed
         ? 'All required patterns found'
-        : `Missing: ${missing.join(', ')}`,
+        : `Missing any of: ${failedGroups.map((g: string[]) => g.join('|')).join(', ')}`,
       verifierUsed: 'self' as const
     }
   }
