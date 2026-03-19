@@ -1,81 +1,143 @@
-import { InnerLoop, GroqAdapter } from '../packages/task-engine/src/index.js'
 import 'dotenv/config'
-const adapter = new GroqAdapter()
+import { InnerLoop, GroqAdapter } from '../packages/task-engine/src/index.js'
+import { SkillGraphStore } from '../packages/skill-graph/src/index.js'
 
-const TASKS = [
-  'Write a TypeScript function that reverses a string.',
-  'Write a TypeScript function that returns the max value in a number array.',
-  'Write a TypeScript function that checks if a number is prime.',
-  'Write a TypeScript function that flattens a nested array one level deep.',
-  'Write a TypeScript function that counts word frequency in a string.'
-]
+const adapter = new GroqAdapter()
+const skillGraph = new SkillGraphStore()
+
+const TASKS: Record<string, { prompt: string; mustContain: string[] }[]> = {
+  'string-manipulation': [
+    {
+      prompt: 'Write a TypeScript function that reverses a string.',
+      mustContain: ['reverse', 'split', 'join']
+    },
+    {
+      prompt: 'Write a TypeScript function that checks if a string is a palindrome. It must handle spaces and casing.',
+      mustContain: ['toLowerCase', 'replace', 'split', 'reverse']
+    },
+    {
+      prompt: 'Write a TypeScript function that truncates a string to N characters and adds "..." if truncated.',
+      mustContain: ['slice', 'length']
+    }
+  ],
+  'array-methods': [
+    {
+      prompt: 'Write a TypeScript function that removes duplicates from an array using a Set.',
+      mustContain: ['Set', 'Array.from']
+    },
+    {
+      prompt: 'Write a TypeScript function that groups an array of objects by a given key.',
+      mustContain: ['reduce', 'Record']
+    },
+    {
+      prompt: 'Write a TypeScript function that returns the intersection of two arrays.',
+      mustContain: ['filter', 'includes']
+    }
+  ],
+  'algorithms': [
+    {
+      prompt: 'Write a TypeScript function that checks if a number is prime.',
+      mustContain: ['Math.sqrt', 'for']
+    },
+    {
+      prompt: 'Write a TypeScript function that returns the nth Fibonacci number using memoization.',
+      mustContain: ['Map', 'recursive', 'memo']
+    },
+    {
+      prompt: 'Write a TypeScript binary search function that returns the index of a target in a sorted array or -1.',
+      mustContain: ['Math.floor', 'while', 'mid']
+    }
+  ]
+}
+
+const subskills = Object.keys(TASKS)
+
+// seed all subskills into graph at low confidence so gaps exist from the start
+for (const subskill of subskills) {
+  skillGraph.update({
+    nodeId: `typescript::${subskill}`,
+    domain: 'typescript',
+    subskill,
+    passed: false,
+    score: 0,
+    failureCategory: undefined
+  })
+}
 
 const generator = {
   async generate(domain: string, difficulty: number) {
-    const prompt = TASKS[Math.floor(Math.random() * TASKS.length)]
+    // always target the weakest subskill
+    const weak = skillGraph.weakest(domain)
+    const subskill = weak?.subskill ?? subskills[0]
+    const list = TASKS[subskill] ?? []
+    const task = list[Math.floor(Math.random() * list.length)]
+
     return {
       id: crypto.randomUUID(),
       domain,
       difficulty,
-      prompt,
+      prompt: task.prompt,
       verifiable: true,
-      verifierType: 'code' as const
+      verifierType: 'code' as const,
+      metadata: { subskill, mustContain: task.mustContain }
     }
   }
 }
 
 const evaluator = {
-  async evaluate(_task: any, attempt: any) {
-    const hasFunction =
-      attempt.output.includes('function') ||
-      attempt.output.includes('=>') ||
-      attempt.output.includes('const ')
+  async evaluate(task: any, attempt: any) {
+    const mustContain: string[] = task.metadata?.mustContain ?? []
+
+    // check each required keyword is present
+    const missing = mustContain.filter(
+      (kw: string) => !attempt.output.includes(kw)
+    )
+
+    const passed = missing.length === 0
+    const score = passed
+      ? attempt.confidence
+      : Math.max(0, 1 - missing.length / mustContain.length) * 0.5
+
+    const failureCategory = !passed ? 'execution' as const : undefined
 
     return {
-      passed: hasFunction,
-      score: hasFunction ? attempt.confidence : 0.0,
-      explanation: hasFunction
-        ? 'Output contains a valid function'
-        : 'No function structure found in output',
+      passed,
+      score,
+      failureCategory,
+      explanation: passed
+        ? `All required patterns found`
+        : `Missing: ${missing.join(', ')}`,
       verifierUsed: 'self' as const
     }
   }
 }
 
-console.log('Starting adaptiq inner loop with Groq...\n')
+console.log('Starting adaptiq inner loop with skill graph...\n')
 
 const loop = new InnerLoop({
   adapter,
   generator,
   evaluator,
   domain: 'typescript',
-  targetDifficulty: 0.3,
-  maxRuns: 5,
+  targetDifficulty: 0.5,
+  maxRuns: 12,
   onEvent: (e) => {
+    const subskill = e.task.metadata?.subskill as string ?? 'general'
+
+    skillGraph.update({
+      nodeId: `typescript::${subskill}`,
+      domain: 'typescript',
+      subskill,
+      passed: e.evaluation.passed,
+      score: e.evaluation.score,
+      failureCategory: e.evaluation.failureCategory
+    })
+
     if (!e.evaluation.passed) {
-      console.log(`  Reason: ${e.evaluation.explanation}`)
+      console.log(`  ↳ ${e.evaluation.explanation}`)
     }
   }
 })
 
-const history = await loop.run()
-
-const passed = history.filter(e => e.evaluation.passed).length
-const avgScore =
-  history.reduce((s, e) => s + e.evaluation.score, 0) / history.length
-const avgConfidence =
-  history.reduce((s, e) => s + e.attempt.confidence, 0) / history.length
-const totalTokens =
-  history.reduce((s, e) => s + (e.attempt as any).tokensUsed ?? 0, 0)
-
-console.log(`
-━━━━━━━━━━━━━━━━━━━━━━━━━
-  Adaptiq — Groq run
-━━━━━━━━━━━━━━━━━━━━━━━━━
-  Model      : llama-3.3-70b-versatile
-  Runs       : ${history.length}
-  Passed     : ${passed}/${history.length}
-  Avg score  : ${avgScore.toFixed(2)}
-  Avg confid : ${avgConfidence.toFixed(2)}
-━━━━━━━━━━━━━━━━━━━━━━━━━
-`)
+await loop.run()
+skillGraph.summary()
