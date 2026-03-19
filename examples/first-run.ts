@@ -103,24 +103,22 @@ const evaluator = {
   async evaluate(task: any, attempt: any) {
     const mustContain: string[] = task.metadata?.mustContain ?? []
 
-    // check each required keyword is present
     const missing = mustContain.filter(
       (kw: string) => !attempt.output.includes(kw)
     )
 
+    // strict — any missing keyword = fail
     const passed = missing.length === 0
     const score = passed
       ? attempt.confidence
-      : Math.max(0, 1 - missing.length / mustContain.length) * 0.5
-
-    const failureCategory = !passed ? 'execution' as const : undefined
+      : Math.max(0, (mustContain.length - missing.length) / mustContain.length) * 0.5
 
     return {
       passed,
       score,
-      failureCategory,
+      failureCategory: passed ? undefined : 'execution' as const,
       explanation: passed
-        ? `All required patterns found`
+        ? 'All required patterns found'
         : `Missing: ${missing.join(', ')}`,
       verifierUsed: 'self' as const
     }
@@ -135,7 +133,7 @@ const loop = new InnerLoop({
   evaluator,
   domain: 'typescript',
   targetDifficulty: 0.5,
-  maxRuns: 12,
+  maxRuns: 20,
   onEvent: (e) => {
   const subskill = e.task.metadata?.subskill as string ?? 'general'
 
@@ -149,8 +147,14 @@ const loop = new InnerLoop({
   })
 
   if (!e.evaluation.passed) {
+    const calibrationGap = e.attempt.confidence - e.evaluation.score
     console.log(`  ↳ ${e.evaluation.explanation}`)
-    console.log(`  ↳ confidence=${e.attempt.confidence.toFixed(2)} vs score=${e.evaluation.score.toFixed(2)} — calibration gap detected`)
+    if (calibrationGap > 0.3) {
+      console.log(
+        `  ↳ calibration gap: model thinks ${(e.attempt.confidence * 100).toFixed(0)}% ` +
+        `but actual score ${(e.evaluation.score * 100).toFixed(0)}%`
+      )
+    }
   }
 }
 })
